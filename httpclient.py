@@ -18,6 +18,7 @@
 # Write your own HTTP GET and POST
 # The point is to understand what you have to send and get experience with it
 
+from email import header, message
 import sys
 import socket
 import re
@@ -41,14 +42,22 @@ class HTTPClient(object):
         return None
 
     def get_code(self, data):
+        data = data.split(" ")
+        if len(data) > 1:
+            return int(data[1])
         return None
-
     def get_headers(self,data):
+        data = data.split("\r\n\r\n")
+        data = data[0].split("\r\n")
+        if len(data)> 1:
+            return data[1]
         return None
 
     def get_body(self, data):
+        data = data.split("\r\n\r\n")
+        if len(data) > 1:
+            return data[1]
         return None
-    
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
         
@@ -65,16 +74,70 @@ class HTTPClient(object):
                 buffer.extend(part)
             else:
                 done = not part
+            
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
+        url = urllib.parse.urlparse(url)
+
+        if url.port != None:
+            port = url.port
+        else:
+            port = 80
+
+        path = "/"
+        if url.path != "":
+            path = url.path
+
+        hostname = url.hostname
+
+        message = "GET %s HTTP/1.1\r\n"%(path)
+        message += "Host: %s\r\n"%(hostname)
+        message += "Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8\r\n\r\n"
+        message += "Connection: close\r\n\r\n"
+        self.connect(hostname,port)
+        self.sendall(message)
+        data = str(self.recvall(self.socket))
+        self.close()
+        code = self.get_code(data)
+        body = self.get_body(data)
+        
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
-        code = 500
+        url = urllib.parse.urlparse(url)
+        if url.port != None:
+            port = url.port
+        else:
+            port = 80
+
+        path = "/"
+        if url.path != "":
+            path = url.path
+
+        if url.hostname != None:
+            hostname = url.hostname
+
+        message = "POST %s HTTP/1.1\r\n"%(path)
+        message += "Host: %s\r\n"%(hostname)
+        message += "Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8\r\n"
+        
         body = ""
+        if args != None:
+            body = urllib.parse.urlencode(args)
+            message += "Content-Type: application/x-www-form-urlencoded\r\n"
+        message += "Content-Length: %d\r\n\r\n"%len(body)
+
+        if body != "":
+            message += "%s\r\n"%(body)
+
+        self.connect(hostname,port)
+        self.sendall(message)
+        data = str(self.recvall(self.socket))
+        self.close()
+        code = self.get_code(data)
+        body = self.get_body(data)
+
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
